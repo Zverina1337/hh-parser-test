@@ -1,0 +1,32 @@
+{
+  "name": "hh-parser",
+  "version": "1.0.0",
+  "description": "CLI-утилита для парсинга вакансий с hh.ru и AI-анализа",
+  "keywords": [
+    "hh.ru",
+    "parser",
+    "vacancy",
+    "ai",
+    "groq"
+  ],
+  "license": "MIT",
+  "author": "Zverinacode",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "parse": "node src/index.js --mode parse",
+    "funnel": "node src/index.js --mode funnel",
+    "analyze": "node src/index.js --mode analyze",
+    "full": "node src/index.js --mode full",
+    "refresh-resume": "node src/index.js --mode refresh-resume",
+    "refresh-filters": "node src/index.js --mode refresh-filters"
+  },
+  "dependencies": {
+    "axios": "^1.6.5",
+    "cheerio": "^1.0.0-rc.12",
+    "openai": "^4.24.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {}
+}

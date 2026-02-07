@@ -1,0 +1,26 @@
+# Зависимости
+node_modules/
+
+# Локальные данные (монтируются как volumes)
+data/
+output/
+
+# Конфигурация
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Документация
+*.md
+!README.md
+
+# Логи
+*.log

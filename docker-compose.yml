@@ -1,0 +1,16 @@
+services:
+  hh-parser:
+    build: .
+    container_name: hh-parser
+    env_file:
+      - .env
+    volumes:
+      # Персистентность данных
+      - ./data:/app/data
+      - ./output:/app/output
+      # Резюме для анализа
+      - ./resume.md:/app/resume.md:ro
+    # Режим по умолчанию — full, можно переопределить:
+    # docker compose run hh-parser node src/index.js --mode parse
+    # docker compose run hh-parser node src/index.js --mode funnel
+    # docker compose run hh-parser node src/index.js --mode analyze
