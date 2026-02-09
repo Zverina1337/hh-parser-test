@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import config from "./config.js";
 import { groq } from "./groq-client.js";
+import { safeParseJSON } from "./utils.js";
 
 const CACHE_PATH = path.join(config.paths.data, "resume-cache.json");
 
@@ -94,13 +95,7 @@ JSON:`;
     });
 
     const content = response.choices[0].message.content.trim();
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      throw new Error("AI не вернул валидный JSON");
-    }
-
-    return JSON.parse(jsonMatch[0]);
+    return safeParseJSON(content, "processResumeWithAI");
   } catch (error) {
     console.error("❌ Ошибка при обработке резюме через AI:", error.message);
     throw error;
@@ -132,11 +127,11 @@ Response in JSON format:
     const response = await groq.chat.completions.create({
       model: config.llm.model,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
-      response_format: { type: "json_object" }
+      temperature: 0.3
+      // response_format убран — safeParseJSON надёжнее обрабатывает ответ
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    return safeParseJSON(response.choices[0].message.content, "extractKeywords");
   } catch (error) {
     console.error("❌ Ошибка при извлечении ключевых слов:", error.message);
     throw error;
@@ -208,13 +203,7 @@ JSON:`;
     });
 
     const content = response.choices[0].message.content.trim();
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      throw new Error("LLM не вернул валидный JSON для preFilter");
-    }
-
-    const rules = JSON.parse(jsonMatch[0]);
+    const rules = safeParseJSON(content, "generatePreFilterRules");
 
     // Валидация обязательных полей
     if (!rules.titleBlacklist || !Array.isArray(rules.titleBlacklist)) {
@@ -282,13 +271,7 @@ JSON:`;
     });
 
     const content = response.choices[0].message.content.trim();
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      throw new Error("LLM не вернул валидный JSON");
-    }
-
-    const extracted = JSON.parse(jsonMatch[0]);
+    const extracted = safeParseJSON(content, "extractFilters");
 
     if (!extracted.keywords || !Array.isArray(extracted.keywords)) {
       throw new Error("Некорректная структура данных: отсутствует keywords");

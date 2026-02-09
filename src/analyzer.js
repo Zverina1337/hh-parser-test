@@ -1,5 +1,6 @@
 import { loadProcessedResume, loadContacts } from "./resume-cache.js";
 import { groq, MODEL, TEMPERATURE } from "./groq-client.js";
+import { safeParseJSON } from "./utils.js";
 
 // Загрузка обработанного резюме (используется кэш если доступен)
 async function loadResume() {
@@ -73,11 +74,11 @@ ${vacancy.description}
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature: TEMPERATURE,
-      response_format: { type: "json_object" }
+      // response_format убран — safeParseJSON надёжнее обрабатывает ответ
     });
 
     const content = completion.choices[0].message.content;
-    return JSON.parse(content);
+    return safeParseJSON(content, "analyzeVacancy");
   } catch (error) {
     if (error.status === 429) {
       throw new Error("Превышен лимит запросов к Groq API. Попробуйте позже.");
@@ -349,7 +350,7 @@ ${JSON.stringify(shortVacancies, null, 2)}
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
-      response_format: { type: "json_object" }
+      // response_format убран — safeParseJSON надёжнее обрабатывает ответ
     });
 
     const content = completion.choices[0].message.content;
@@ -358,11 +359,10 @@ ${JSON.stringify(shortVacancies, null, 2)}
 
     let parsed;
     try {
-      parsed = JSON.parse(content);
+      parsed = safeParseJSON(content, "quickScore");
     } catch (parseError) {
-      console.error("❌ Ошибка парсинга JSON:", parseError.message);
       console.error("❌ Содержимое ответа:", content);
-      throw new Error(`Невалидный JSON от LLM: ${parseError.message}`);
+      throw parseError;
     }
 
     let scores;
@@ -509,11 +509,11 @@ ${vacancy.description}
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature: TEMPERATURE,
-      response_format: { type: "json_object" }
+      // response_format убран — safeParseJSON надёжнее обрабатывает ответ
     });
 
     const content = completion.choices[0].message.content;
-    const result = JSON.parse(content);
+    const result = safeParseJSON(content, "deepAnalyze");
 
     // Возвращаем структурированный результат
     return {

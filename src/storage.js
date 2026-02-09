@@ -12,6 +12,21 @@ const PROCESSED_FILE = path.join(DATA_DIR, "processed.json");
 const COMPANY_CACHE_FILE = path.join(DATA_DIR, "company_cache.json");
 const COMPANIES_FILE = path.join(DATA_DIR, "companies.json");
 
+// Очередь записи — предотвращает race condition при параллельной записи в файлы
+const writeQueues = new Map();
+
+async function withWriteLock(filePath, fn) {
+  if (!writeQueues.has(filePath)) {
+    writeQueues.set(filePath, Promise.resolve());
+  }
+
+  const queue = writeQueues.get(filePath);
+  const next = queue.then(fn, fn);
+  writeQueues.set(filePath, next);
+
+  return next;
+}
+
 // Кэш для processed.json с TTL
 const processedCache = {
   data: null,
@@ -106,37 +121,39 @@ export async function saveVacancy(vacancy) {
 
 // Обновление статуса вакансии в реестре
 export async function updateStatus(id, status, metadata = {}) {
-  const processed = await loadProcessed();
+  return withWriteLock(PROCESSED_FILE, async () => {
+    const processed = await loadProcessed();
 
-  if (!processed[id]) {
-    processed[id] = {
-      status,
-      parsedAt: new Date().toISOString(),
-      analyzedAt: null,
-      quickScoredAt: null,
-      quickScore: null,
-      reportGeneratedAt: null,
-      ...metadata
-    };
-  } else {
-    processed[id].status = status;
+    if (!processed[id]) {
+      processed[id] = {
+        status,
+        parsedAt: new Date().toISOString(),
+        analyzedAt: null,
+        quickScoredAt: null,
+        quickScore: null,
+        reportGeneratedAt: null,
+        ...metadata
+      };
+    } else {
+      processed[id].status = status;
 
-    // Обновляем таймстампы в зависимости от статуса
-    if (status === "analyzed") {
-      processed[id].analyzedAt = new Date().toISOString();
+      // Обновляем таймстампы в зависимости от статуса
+      if (status === "analyzed") {
+        processed[id].analyzedAt = new Date().toISOString();
+      }
+      if (status === "quick_scored" || status === "ready_for_deep") {
+        processed[id].quickScoredAt = new Date().toISOString();
+      }
+
+      // Сохраняем дополнительные метаданные (например, quickScore)
+      Object.assign(processed[id], metadata);
     }
-    if (status === "quick_scored" || status === "ready_for_deep") {
-      processed[id].quickScoredAt = new Date().toISOString();
-    }
 
-    // Сохраняем дополнительные метаданные (например, quickScore)
-    Object.assign(processed[id], metadata);
-  }
+    await fs.writeFile(PROCESSED_FILE, JSON.stringify(processed, null, 2));
 
-  await fs.writeFile(PROCESSED_FILE, JSON.stringify(processed, null, 2));
-
-  // Инвалидируем кэш после записи
-  invalidateProcessedCache();
+    // Инвалидируем кэш после записи
+    invalidateProcessedCache();
+  });
 }
 
 // Получение списка вакансий без анализа (старая функция для обратной совместимости)
@@ -250,15 +267,17 @@ export async function getCachedCompanyResearch(companyName) {
 
 // Сохранение исследования компании в кэш
 export async function cacheCompanyResearch(companyName, research) {
-  const cache = await loadJSON(COMPANY_CACHE_FILE, {});
-  const normalizedName = companyName.toLowerCase().trim();
+  return withWriteLock(COMPANY_CACHE_FILE, async () => {
+    const cache = await loadJSON(COMPANY_CACHE_FILE, {});
+    const normalizedName = companyName.toLowerCase().trim();
 
-  cache[normalizedName] = {
-    ...research,
-    cachedAt: new Date().toISOString()
-  };
+    cache[normalizedName] = {
+      ...research,
+      cachedAt: new Date().toISOString()
+    };
 
-  await saveJSON(COMPANY_CACHE_FILE, cache);
+    await saveJSON(COMPANY_CACHE_FILE, cache);
+  });
 }
 
 // Загрузка реестра компаний (с кэшированием)
@@ -299,20 +318,22 @@ export async function getCompanySlug(companyName) {
 
 // Сохранение информации о компании в реестр
 export async function saveCompanyToRegistry(companyName, slug, metadata = {}) {
-  const companies = await loadCompanies();
-  const normalizedName = companyName.toLowerCase().trim();
+  return withWriteLock(COMPANIES_FILE, async () => {
+    const companies = await loadCompanies();
+    const normalizedName = companyName.toLowerCase().trim();
 
-  companies[normalizedName] = {
-    name: companyName,
-    slug,
-    createdAt: new Date().toISOString(),
-    ...metadata
-  };
+    companies[normalizedName] = {
+      name: companyName,
+      slug,
+      createdAt: new Date().toISOString(),
+      ...metadata
+    };
 
-  await saveJSON(COMPANIES_FILE, companies);
+    await saveJSON(COMPANIES_FILE, companies);
 
-  // Инвалидируем кэш после записи
-  invalidateCompaniesCache();
+    // Инвалидируем кэш после записи
+    invalidateCompaniesCache();
+  });
 }
 
 // Проверка: есть ли компания в реестре
@@ -323,18 +344,20 @@ export async function isCompanyInRegistry(companyName) {
 
 // Отметка о генерации отчёта для вакансии
 export async function markReportGenerated(id) {
-  const processed = await loadProcessed();
+  return withWriteLock(PROCESSED_FILE, async () => {
+    const processed = await loadProcessed();
 
-  if (!processed[id]) {
-    throw new Error(`Вакансия с ID ${id} не найдена в реестре`);
-  }
+    if (!processed[id]) {
+      throw new Error(`Вакансия с ID ${id} не найдена в реестре`);
+    }
 
-  processed[id].reportGeneratedAt = new Date().toISOString();
+    processed[id].reportGeneratedAt = new Date().toISOString();
 
-  await fs.writeFile(PROCESSED_FILE, JSON.stringify(processed, null, 2));
+    await fs.writeFile(PROCESSED_FILE, JSON.stringify(processed, null, 2));
 
-  // Инвалидируем кэш после записи
-  invalidateProcessedCache();
+    // Инвалидируем кэш после записи
+    invalidateProcessedCache();
+  });
 }
 
 // Проверка: сгенерирован ли отчёт для вакансии
