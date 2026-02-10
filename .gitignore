@@ -8,6 +8,7 @@ node_modules/
 data/
 output/
 resume.md
+.claude/
 
 # Логи
 *.log
